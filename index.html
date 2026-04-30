@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Видеочат на GitHub (PeerJS)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0b1120; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: system-ui; }
+        .container { max-width: 1200px; width: 100%; padding: 20px; background: #0f1422; border-radius: 2rem; }
+        .videos { display: flex; gap: 20px; flex-wrap: wrap; }
+        video { width: 100%; max-width: 500px; background: black; border-radius: 1rem; transform: scaleX(-1); }
+        .controls { margin-top: 20px; background: #1a1f2e; padding: 15px; border-radius: 1rem; }
+        input, button { padding: 8px 12px; margin: 5px; border-radius: 2rem; border: none; }
+        button { background: #2a3e6e; color: white; cursor: pointer; }
+        .status { margin-top: 10px; color: #bbd4ff; font-size: 14px; text-align: center; }
+    </style>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+</head>
+<body>
+<div class="container">
+    <div class="videos">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <video id="remoteVideo" autoplay playsinline></video>
+    </div>
+    <div class="controls">
+        <div><strong>Ваш Peer ID:</strong> <span id="myPeerId">загрузка...</span> <button id="copyBtn">Копировать</button></div>
+        <div><input type="text" id="remoteIdInput" placeholder="Введите Peer ID собеседника"> <button id="callBtn">Позвонить</button> <button id="hangupBtn">Завершить</button></div>
+        <div><button id="toggleMic">🎤 Мик OFF</button> <button id="toggleCam">📷 Камера OFF</button></div>
+        <div class="status" id="status">Ожидание доступа к камере...</div>
+    </div>
+</div>
+<script>
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const myPeerIdSpan = document.getElementById('myPeerId');
+    const remoteIdInput = document.getElementById('remoteIdInput');
+    const callBtn = document.getElementById('callBtn');
+    const hangupBtn = document.getElementById('hangupBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const toggleMic = document.getElementById('toggleMic');
+    const toggleCam = document.getElementById('toggleCam');
+    const statusDiv = document.getElementById('status');
+
+    let localStream = null;
+    let peer = null;
+    let currentCall = null;
+    let isCallActive = false;
+
+    function setStatus(msg, isError = false) {
+        statusDiv.innerHTML = isError ? `⚠️ ${msg}` : `✅ ${msg}`;
+        statusDiv.style.color = isError ? '#ff9999' : '#bbd4ff';
+    }
+
+    async function initMedia() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localStream = stream;
+            localVideo.srcObject = stream;
+            toggleMic.textContent = "🎤 Мик ON";
+            toggleCam.textContent = "📷 Камера ON";
+            setStatus("Камера и микрофон готовы");
+            return true;
+        } catch(err) {
+            setStatus("Нет доступа к камере/микрофону", true);
+            return false;
+        }
+    }
+
+    function initPeer() {
+        peer = new Peer(); // использует публичный сервер 0.peerjs.com
+        peer.on('open', id => {
+            myPeerIdSpan.innerText = id;
+            setStatus(`Ваш ID: ${id}. Передайте его собеседнику.`);
+        });
+        peer.on('call', call => {
+            if (!localStream) return call.close();
+            if (isCallActive) {
+                setStatus("Уже в звонке, отклоняем", true);
+                return call.close();
+            }
+            call.answer(localStream);
+            currentCall = call;
+            setupCall(call);
+            setStatus(`Входящий звонок от ${call.peer}`);
+        });
+        peer.on('error', err => setStatus(`Ошибка Peer: ${err.message}`, true));
+    }
+
+    function setupCall(call) {
+        call.on('stream', remoteStream => {
+            remoteVideo.srcObject = remoteStream;
+            isCallActive = true;
+            setStatus("Соединение установлено!");
+        });
+        call.on('close', () => {
+            if (currentCall === call) endCall();
+            setStatus("Собеседник отключился");
+        });
+        call.on('error', err => {
+            setStatus(`Ошибка вызова: ${err.message}`, true);
+            endCall();
+        });
+    }
+
+    function startCall(remoteId) {
+        if (!localStream) return setStatus("Нет камеры", true);
+        if (!peer) return setStatus("Peer не готов", true);
+        if (remoteId === peer.id) return setStatus("Нельзя позвонить себе", true);
+        if (isCallActive) return setStatus("Уже в звонке", true);
+        const call = peer.call(remoteId, localStream);
+        currentCall = call;
+        setupCall(call);
+        setStatus(`Звоним ${remoteId}...`);
+    }
+
+    function endCall() {
+        if (currentCall) currentCall.close();
+        currentCall = null;
+        remoteVideo.srcObject = null;
+        isCallActive = false;
+        setStatus("Звонок завершён");
+    }
+
+    function toggleMicrophone() {
+        if (!localStream) return;
+        const audio = localStream.getAudioTracks()[0];
+        if (audio) {
+            audio.enabled = !audio.enabled;
+            toggleMic.textContent = audio.enabled ? "🎤 Мик ON" : "🔇 Мик OFF";
+        }
+    }
+    function toggleCamera() {
+        if (!localStream) return;
+        const video = localStream.getVideoTracks()[0];
+        if (video) {
+            video.enabled = !video.enabled;
+            toggleCam.textContent = video.enabled ? "📷 Камера ON" : "🚫 Камера OFF";
+        }
+    }
+
+    copyBtn.onclick = () => {
+        if (peer && peer.id) navigator.clipboard.writeText(peer.id);
+    };
+    callBtn.onclick = () => startCall(remoteIdInput.value.trim());
+    hangupBtn.onclick = endCall;
+    toggleMic.onclick = toggleMicrophone;
+    toggleCam.onclick = toggleCamera;
+
+    initMedia().then(() => initPeer());
+</script>
+</body>
+</html>
