@@ -2,151 +2,436 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Видеочат на GitHub (PeerJS)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Видеочат на Trystero (без сервера)</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #0b1120; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: system-ui; }
-        .container { max-width: 1200px; width: 100%; padding: 20px; background: #0f1422; border-radius: 2rem; }
-        .videos { display: flex; gap: 20px; flex-wrap: wrap; }
-        video { width: 100%; max-width: 500px; background: black; border-radius: 1rem; transform: scaleX(-1); }
-        .controls { margin-top: 20px; background: #1a1f2e; padding: 15px; border-radius: 1rem; }
-        input, button { padding: 8px 12px; margin: 5px; border-radius: 2rem; border: none; }
-        button { background: #2a3e6e; color: white; cursor: pointer; }
-        .status { margin-top: 10px; color: #bbd4ff; font-size: 14px; text-align: center; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, 'Segoe UI', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(145deg, #0a0f1e 0%, #0c1222 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1300px;
+            width: 100%;
+            background: rgba(18, 25, 45, 0.75);
+            backdrop-filter: blur(12px);
+            border-radius: 2rem;
+            padding: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        .video-grid {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+
+        .video-card {
+            flex: 1;
+            min-width: 280px;
+            background: #0f1422;
+            border-radius: 1.5rem;
+            overflow: hidden;
+            border: 1px solid #2a3650;
+            transition: transform 0.2s;
+        }
+
+        .video-card:hover {
+            transform: scale(1.01);
+        }
+
+        .video-label {
+            padding: 0.6rem 1rem;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            font-weight: 600;
+            color: #ccd6f0;
+            font-size: 0.8rem;
+            display: inline-block;
+            border-radius: 2rem;
+            margin: 0.5rem 0 0 0.8rem;
+        }
+
+        video {
+            width: 100%;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+            background: #000;
+            display: block;
+            border-radius: 1rem;
+            margin-top: 0.3rem;
+        }
+
+        #localVideo {
+            transform: scaleX(-1);
+        }
+
+        .panel {
+            background: rgba(15, 22, 37, 0.8);
+            backdrop-filter: blur(8px);
+            border-radius: 1.5rem;
+            padding: 1.2rem;
+        }
+
+        .room-control {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: flex-end;
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group {
+            flex: 2;
+        }
+
+        .input-group label {
+            font-size: 0.7rem;
+            color: #9aafdf;
+            display: block;
+            margin-bottom: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        input, button {
+            padding: 8px 16px;
+            border-radius: 2rem;
+            border: none;
+            font-weight: 600;
+        }
+
+        input {
+            width: 100%;
+            background: #030617;
+            border: 1px solid #35507a;
+            color: white;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        button {
+            background: #2a3e6e;
+            color: white;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #4a6e9e;
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: #992525;
+        }
+        .btn-danger:hover {
+            background: #c13b3b;
+        }
+
+        .media-buttons {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .media-btn {
+            background: #1e293b;
+        }
+        .media-btn.active {
+            background: #3b5e7e;
+            box-shadow: 0 0 6px #5faaff;
+        }
+
+        .status {
+            margin-top: 1rem;
+            background: #000000aa;
+            border-radius: 2rem;
+            padding: 8px 16px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #bdd4ff;
+            border-left: 3px solid #4c9aff;
+        }
+
+        @media (max-width: 700px) {
+            .container { padding: 1rem; }
+            .video-card { min-width: 250px; }
+        }
     </style>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <!-- Подключаем Trystero (MQTT-based signalling) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "trystero": "https://cdn.skypack.dev/trystero@0.15.0"
+            }
+        }
+    </script>
+    <script type="module">
+        import { joinRoom, getSelfId } from 'trystero';
+
+        // --- DOM элементы ---
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const roomInput = document.getElementById('roomInput');
+        const joinBtn = document.getElementById('joinBtn');
+        const leaveBtn = document.getElementById('leaveBtn');
+        const toggleMicBtn = document.getElementById('toggleMicBtn');
+        const toggleCamBtn = document.getElementById('toggleCamBtn');
+        const statusDiv = document.getElementById('statusMessage');
+        const myIdSpan = document.getElementById('myId');
+
+        // --- Глобальные переменные ---
+        let localStream = null;
+        let room = null;            // комната Trystero
+        let currentPeerId = null;   // id удалённого участника (упрощённо, поддерживаем одного)
+        let currentCall = null;      // объект медиа-вызова
+
+        // --- Вспомогательные функции ---
+        function setStatus(msg, isError = false) {
+            statusDiv.innerHTML = isError ? `⚠️ ${msg}` : `✨ ${msg}`;
+            statusDiv.style.borderLeftColor = isError ? '#ff7b7b' : '#6aabff';
+            console.log(msg);
+        }
+
+        // --- Запрос доступа к камере/микрофону ---
+        async function initLocalMedia() {
+            try {
+                setStatus("🎥 Запрос доступа к камере и микрофону...");
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localStream = stream;
+                localVideo.srcObject = stream;
+                toggleMicBtn.textContent = "🎤 Мик ON";
+                toggleCamBtn.textContent = "📷 Камера ON";
+                toggleMicBtn.classList.add('active');
+                toggleCamBtn.classList.add('active');
+                setStatus("✅ Камера и микрофон готовы. Можете войти в комнату.");
+                return true;
+            } catch (err) {
+                console.error(err);
+                let msg = "Не удалось получить доступ к камере/микрофону. Проверьте разрешения.";
+                if (err.name === 'NotAllowedError') msg = "❌ Вы запретили доступ. Разрешите в браузере.";
+                setStatus(msg, true);
+                return false;
+            }
+        }
+
+        // --- Вход в комнату (создание/подключение) ---
+        function joinRoomTrystero(roomName) {
+            if (room) {
+                leaveRoom(); // покинуть старую комнату
+            }
+            
+            // Используем MQTT брокер для сигнализации (стабильно, без своего сервера)
+            room = joinRoom(roomName, { 
+                network: 'mqtt', 
+                // публичный брокер HiveMQ (бесплатно, без регистрации)
+                mqttConfig: { broker: 'wss://mqtt.eclipseprojects.io:443/mqtt' }
+            });
+            
+            setStatus(`📡 Вход в комнату "${roomName}"...`);
+
+            // Отображаем свой уникальный ID (генерируется Trystero)
+            const myId = getSelfId();
+            myIdSpan.innerText = myId;
+            setStatus(`Ваш ID в комнате: ${myId}. Ожидаем подключения другого участника...`);
+
+            // Слушаем событие появления нового пира
+            room.onPeerJoin = (peerId) => {
+                setStatus(`👤 Новый участник подключился: ${peerId}`);
+                if (!currentPeerId && peerId !== getSelfId()) {
+                    currentPeerId = peerId;
+                    initiateCall(peerId);
+                }
+            };
+
+            // Слушаем уход пира
+            room.onPeerLeave = (peerId) => {
+                setStatus(`👋 Участник ${peerId} покинул комнату.`);
+                if (currentPeerId === peerId) {
+                    endCall();
+                }
+            };
+
+            // Обработка входящих медиа-приглашений
+            room.onMediaRequest = async (callerId) => {
+                setStatus(`📞 Входящий видеозвонок от ${callerId}...`);
+                if (!localStream) {
+                    setStatus("Нет локального потока, невозможно ответить", true);
+                    return;
+                }
+                if (currentCall) {
+                    setStatus("Уже в звонке, отклоняем", true);
+                    return;
+                }
+                currentPeerId = callerId;
+                // Отвечаем на звонок
+                currentCall = await room.answerMedia(currentPeerId, localStream);
+                setupMediaCall(currentCall);
+            };
+        }
+
+        // --- Инициировать звонок другому участнику ---
+        async function initiateCall(peerId) {
+            if (!localStream) {
+                setStatus("Локальный поток не готов", true);
+                return;
+            }
+            if (currentCall) {
+                setStatus("Уже есть активный звонок", true);
+                return;
+            }
+            setStatus(`📞 Звоним ${peerId}...`);
+            try {
+                currentCall = await room.callMedia(peerId, localStream);
+                setupMediaCall(currentCall);
+            } catch (err) {
+                setStatus(`Ошибка вызова: ${err.message}`, true);
+            }
+        }
+
+        // --- Настройка обработчиков для активного медиазвонка ---
+        function setupMediaCall(call) {
+            call.on('stream', (remoteStream) => {
+                remoteVideo.srcObject = remoteStream;
+                setStatus("✅ Видеосвязь установлена!");
+            });
+            call.on('close', () => {
+                setStatus("Звонок завершён");
+                if (remoteVideo.srcObject) {
+                    remoteVideo.srcObject = null;
+                }
+                currentCall = null;
+                currentPeerId = null;
+            });
+            call.on('error', (err) => {
+                setStatus(`Ошибка в звонке: ${err.message}`, true);
+                endCall();
+            });
+        }
+
+        // --- Завершить звонок ---
+        function endCall() {
+            if (currentCall) {
+                currentCall.close();
+                currentCall = null;
+            }
+            if (remoteVideo.srcObject) {
+                remoteVideo.srcObject = null;
+            }
+            currentPeerId = null;
+            setStatus("Звонок завершён вами");
+        }
+
+        // --- Покинуть комнату ---
+        function leaveRoom() {
+            endCall();
+            if (room) {
+                room.leave();
+                room = null;
+            }
+            myIdSpan.innerText = "—";
+            setStatus("Вы вышли из комнаты");
+        }
+
+        // --- Управление микрофоном и камерой ---
+        function toggleMicrophone() {
+            if (!localStream) return;
+            const audioTrack = localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !audioTrack.enabled;
+                toggleMicBtn.textContent = audioTrack.enabled ? "🎤 Мик ON" : "🔇 Мик OFF";
+                toggleMicBtn.classList.toggle('active', audioTrack.enabled);
+                setStatus(`Микрофон ${audioTrack.enabled ? "включён" : "выключен"}`);
+            }
+        }
+
+        function toggleCamera() {
+            if (!localStream) return;
+            const videoTrack = localStream.getVideoTracks()[0];
+            if (videoTrack) {
+                videoTrack.enabled = !videoTrack.enabled;
+                toggleCamBtn.textContent = videoTrack.enabled ? "📷 Камера ON" : "🚫 Камера OFF";
+                toggleCamBtn.classList.toggle('active', videoTrack.enabled);
+                setStatus(`Камера ${videoTrack.enabled ? "включена" : "выключена"}`);
+            }
+        }
+
+        // --- Обработка кнопок UI ---
+        function bindEvents() {
+            joinBtn.addEventListener('click', () => {
+                const roomName = roomInput.value.trim();
+                if (!roomName) {
+                    setStatus("Введите название комнаты", true);
+                    return;
+                }
+                joinRoomTrystero(roomName);
+            });
+            leaveBtn.addEventListener('click', () => {
+                if (room) leaveRoom();
+                else setStatus("Вы не в комнате");
+            });
+            toggleMicBtn.addEventListener('click', toggleMicrophone);
+            toggleCamBtn.addEventListener('click', toggleCamera);
+        }
+
+        // --- Запуск приложения ---
+        async function main() {
+            await initLocalMedia();
+            bindEvents();
+        }
+
+        main();
+    </script>
 </head>
 <body>
 <div class="container">
-    <div class="videos">
-        <video id="localVideo" autoplay muted playsinline></video>
-        <video id="remoteVideo" autoplay playsinline></video>
+    <div class="video-grid">
+        <div class="video-card">
+            <div class="video-label">📹 ВЫ (локальная камера)</div>
+            <video id="localVideo" autoplay muted playsinline></video>
+        </div>
+        <div class="video-card">
+            <div class="video-label">🖥️ СОБЕСЕДНИК</div>
+            <video id="remoteVideo" autoplay playsinline></video>
+        </div>
     </div>
-    <div class="controls">
-        <div><strong>Ваш Peer ID:</strong> <span id="myPeerId">загрузка...</span> <button id="copyBtn">Копировать</button></div>
-        <div><input type="text" id="remoteIdInput" placeholder="Введите Peer ID собеседника"> <button id="callBtn">Позвонить</button> <button id="hangupBtn">Завершить</button></div>
-        <div><button id="toggleMic">🎤 Мик OFF</button> <button id="toggleCam">📷 Камера OFF</button></div>
-        <div class="status" id="status">Ожидание доступа к камере...</div>
+
+    <div class="panel">
+        <div class="room-control">
+            <div class="input-group">
+                <label>🏠 НАЗВАНИЕ КОМНАТЫ (общее для вас и собеседника)</label>
+                <input type="text" id="roomInput" placeholder="например: myroom123" value="testroom">
+            </div>
+            <button id="joinBtn">🔗 ВОЙТИ В КОМНАТУ</button>
+            <button id="leaveBtn" class="btn-danger">🚪 ПОКИНУТЬ КОМНАТУ</button>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div>🆔 Ваш ID в комнате: <strong id="myId">—</strong></div>
+            <div class="media-buttons">
+                <button id="toggleMicBtn" class="media-btn active">🎤 Мик ON</button>
+                <button id="toggleCamBtn" class="media-btn active">📷 Камера ON</button>
+            </div>
+        </div>
+
+        <div id="statusMessage" class="status">
+            ⚙️ Разрешите доступ к камере и микрофону, затем введите название комнаты.
+        </div>
     </div>
 </div>
-<script>
-    const localVideo = document.getElementById('localVideo');
-    const remoteVideo = document.getElementById('remoteVideo');
-    const myPeerIdSpan = document.getElementById('myPeerId');
-    const remoteIdInput = document.getElementById('remoteIdInput');
-    const callBtn = document.getElementById('callBtn');
-    const hangupBtn = document.getElementById('hangupBtn');
-    const copyBtn = document.getElementById('copyBtn');
-    const toggleMic = document.getElementById('toggleMic');
-    const toggleCam = document.getElementById('toggleCam');
-    const statusDiv = document.getElementById('status');
-
-    let localStream = null;
-    let peer = null;
-    let currentCall = null;
-    let isCallActive = false;
-
-    function setStatus(msg, isError = false) {
-        statusDiv.innerHTML = isError ? `⚠️ ${msg}` : `✅ ${msg}`;
-        statusDiv.style.color = isError ? '#ff9999' : '#bbd4ff';
-    }
-
-    async function initMedia() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            localStream = stream;
-            localVideo.srcObject = stream;
-            toggleMic.textContent = "🎤 Мик ON";
-            toggleCam.textContent = "📷 Камера ON";
-            setStatus("Камера и микрофон готовы");
-            return true;
-        } catch(err) {
-            setStatus("Нет доступа к камере/микрофону", true);
-            return false;
-        }
-    }
-
-    function initPeer() {
-        peer = new Peer(); // использует публичный сервер 0.peerjs.com
-        peer.on('open', id => {
-            myPeerIdSpan.innerText = id;
-            setStatus(`Ваш ID: ${id}. Передайте его собеседнику.`);
-        });
-        peer.on('call', call => {
-            if (!localStream) return call.close();
-            if (isCallActive) {
-                setStatus("Уже в звонке, отклоняем", true);
-                return call.close();
-            }
-            call.answer(localStream);
-            currentCall = call;
-            setupCall(call);
-            setStatus(`Входящий звонок от ${call.peer}`);
-        });
-        peer.on('error', err => setStatus(`Ошибка Peer: ${err.message}`, true));
-    }
-
-    function setupCall(call) {
-        call.on('stream', remoteStream => {
-            remoteVideo.srcObject = remoteStream;
-            isCallActive = true;
-            setStatus("Соединение установлено!");
-        });
-        call.on('close', () => {
-            if (currentCall === call) endCall();
-            setStatus("Собеседник отключился");
-        });
-        call.on('error', err => {
-            setStatus(`Ошибка вызова: ${err.message}`, true);
-            endCall();
-        });
-    }
-
-    function startCall(remoteId) {
-        if (!localStream) return setStatus("Нет камеры", true);
-        if (!peer) return setStatus("Peer не готов", true);
-        if (remoteId === peer.id) return setStatus("Нельзя позвонить себе", true);
-        if (isCallActive) return setStatus("Уже в звонке", true);
-        const call = peer.call(remoteId, localStream);
-        currentCall = call;
-        setupCall(call);
-        setStatus(`Звоним ${remoteId}...`);
-    }
-
-    function endCall() {
-        if (currentCall) currentCall.close();
-        currentCall = null;
-        remoteVideo.srcObject = null;
-        isCallActive = false;
-        setStatus("Звонок завершён");
-    }
-
-    function toggleMicrophone() {
-        if (!localStream) return;
-        const audio = localStream.getAudioTracks()[0];
-        if (audio) {
-            audio.enabled = !audio.enabled;
-            toggleMic.textContent = audio.enabled ? "🎤 Мик ON" : "🔇 Мик OFF";
-        }
-    }
-    function toggleCamera() {
-        if (!localStream) return;
-        const video = localStream.getVideoTracks()[0];
-        if (video) {
-            video.enabled = !video.enabled;
-            toggleCam.textContent = video.enabled ? "📷 Камера ON" : "🚫 Камера OFF";
-        }
-    }
-
-    copyBtn.onclick = () => {
-        if (peer && peer.id) navigator.clipboard.writeText(peer.id);
-    };
-    callBtn.onclick = () => startCall(remoteIdInput.value.trim());
-    hangupBtn.onclick = endCall;
-    toggleMic.onclick = toggleMicrophone;
-    toggleCam.onclick = toggleCamera;
-
-    initMedia().then(() => initPeer());
-</script>
 </body>
 </html>
